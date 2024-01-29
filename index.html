@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <title>p2p Chat</title>
+</head>
+<body>
+    <style>
+        *{
+            margin: 0;
+            padding: 0;
+        }
+        video{
+            width: 40%;
+            max-width: 500px;
+        }
+        input{
+            margin: 5px;
+            padding: 5px;
+            width: calc(100% - 25px);
+            margin-bottom: 10px;
+        }
+        button{
+            padding: 7px;
+            border-radius: 20px;
+        }
+    </style>
+    <div>
+        <input type="text" placeholder="Type id to connect and message to send...">
+        <div style="display: flex;justify-content: space-between;">
+            <button  onclick="connect()">Connect</button>
+            <button  onclick="send()">Message</button>
+        </div>
+    </div>
+    <div id="root"></div>
+    </div>
+    <script>
+        var peer = new Peer();
+        const container = document.getElementById("root");
+        const input = document.querySelector("input");
+        let isStreaming = {};
+        let vidstream;
+        async function showstream(stream,text){
+            try {
+                const video = document.createElement("video");
+                video.srcObject = stream;
+                video.play();
+                if(text!=='local')video.style.width = "100%";
+                container.appendChild(video);
+                container.appendChild('<br>')
+            } catch (error) {
+                console.log(error);
+            }
+        }
+        peer.on('open', function (id) {
+            const element = document.createElement('h2');
+            element.innerHTML = 'Your ID = ' + id;
+            container.appendChild(element);
+        });
+
+        var getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+        
+        getUserMedia({video: true, audio: true}, function(stream) {
+          vidstream = stream
+          showstream(stream,"local")
+        }, function(err) {
+          console.log('Failed to get local stream' ,err);
+        });
+
+        
+        let connection;
+        function connect() {
+            const id = input.value;
+            const conn = peer.connect(id);
+            connection = conn
+            console.log("connecting to :-",id);
+
+            var call = peer.call(id, vidstream);
+            call.on('stream', function(remoteStream) {
+                if(!isStreaming[call.connectionId])
+                showstream(remoteStream, "Recieving Back"),isStreaming[call.connectionId]=true;
+            });
+            conn.on('open', function () {
+                console.log('Connection opening');
+                conn.send('Connection opened')
+            });
+            conn.on('data', function (data) {
+                console.log('Received', data);
+                const element = document.createElement('p');
+                element.innerHTML = '<span style="color:green;">Received: </span>' + data;
+                container.appendChild(element);
+            });
+        }
+        function send(){
+            const text = input.value;
+            connection.send(text);
+            const element = document.createElement('p');
+            element.innerHTML = '<span style="color:red;">Sent :- </span>' + text;
+            container.appendChild(element);
+        }
+
+        peer.on('connection', function (conn) {
+            console.log('Peer connected:', conn.peer);
+            input.value=(conn.peer)
+            connection = conn
+            conn.send('Accepted');
+            conn.on('data', function (data) {
+                console.log('Received', data);
+                const element = document.createElement('p');
+                element.innerHTML = '<span style="color:green;">Received: </span>' + data;
+                container.appendChild(element);
+            });
+            conn.send('Hi');
+        });
+
+
+        peer.on('call', function(call) {
+            call.answer(vidstream); 
+            
+            call.on('stream', function(remoteStream) {
+                if(!isStreaming[call.connectionId])
+                showstream(remoteStream, "Incomming"),isStreaming[call.connectionId]=true;
+            });
+        });
+        
+    </script>
+</body>
+</html>
